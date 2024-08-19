@@ -1,0 +1,57 @@
+{{ block "index" . }}
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="/js/htmx.js"></script>
+    <script src="/js/_hyperscript.js"></script>
+    <link rel="stylesheet" href="/css/missing.min.css">
+
+    <title>Todos</title>
+</head>
+
+<body>
+    <h1>Todos</h1>
+    <section>
+        <div>
+            <form hx-post="/" hx-target='#todo-list' hx-swap='beforeend'>
+                {{ template "input" . }}
+                <button>Add</button>
+            </form>
+            <div id="messages" hx-swap-oob='true'></div>
+        </div>
+    </section>
+    <section>
+        {{ template "todos" . }}
+    </section>
+</body>
+
+</html>
+{{ end }}
+
+{{ block "input" . }}
+<input type="text" name="title" id="title" placeholder='Add a new todo' hx-swap-oob='true'>
+{{ end }}
+
+{{ block "todos" . }}
+<ul id="todo-list">
+    {{ range . }}
+    {{ template "todo" . }}
+    {{ end }}
+</ul>
+{{ end }}
+
+{{ block "todo" . }}
+<li id="todo-{{.ID.Hex}}">
+    <a href="#" hx-get="/toggle/{{.ID.Hex}}" hx-target="#todo-{{.ID.Hex}}">Toggle</a>
+    <a href="#" hx-delete="/{{.ID.Hex}}" hx-swap="outerHTML" hx-target="#todo-{{.ID.Hex}}">Delete</a>
+    {{ .Title }} {{if .Done}}<span> ✅</span>
+    {{ end }}
+</li>
+{{ end }}
+
+{{ block "messages" . }}
+<div id="messages" hx-swap-oob='true'>{{ . }}</div>
+{{ end }}
