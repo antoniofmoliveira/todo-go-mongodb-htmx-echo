@@ -1,3 +1,9 @@
 {
-    "makefile.configureOnOpen": false
+    "makefile.configureOnOpen": false,
+    "go.diagnostic.vulncheck": "Imports",
+    "gopls": {
+        "ui.codelenses": {
+            "run_govulncheck": true, // "Run govulncheck" code lens on go.mod file.
+        }
+    }
 }
