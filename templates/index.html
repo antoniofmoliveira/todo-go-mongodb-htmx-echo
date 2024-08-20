@@ -8,17 +8,20 @@
     <script src="/js/htmx.js"></script>
     <script src="/js/_hyperscript.js"></script>
     <link rel="stylesheet" href="/css/missing.min.css">
-
     <title>Todos</title>
 </head>
 
-<body>
+<body _="on every htmx:beforeSwap(evt) if evt.detail.xhr.status == 422 then 
+        set {shouldSwap = true, isError = false} on evt.detail
+    end">
     <h1>Todos</h1>
     <section>
         <div>
             <form hx-post="/" hx-target='#todo-list' hx-swap='beforeend'>
-                {{ template "input" . }}
-                <button>Add</button>
+                <fieldset>
+                    {{ template "input" . }}
+                    <button>Add</button>
+                </fieldset>
             </form>
             <div id="messages" hx-swap-oob='true'></div>
         </div>
@@ -46,8 +49,9 @@
 {{ block "todo" . }}
 <li id="todo-{{.ID.Hex}}">
     <a href="#" hx-get="/toggle/{{.ID.Hex}}" hx-target="#todo-{{.ID.Hex}}">Toggle</a>
-    <a href="#" hx-delete="/{{.ID.Hex}}" hx-swap="outerHTML" hx-target="#todo-{{.ID.Hex}}">Delete</a>
-    {{ .Title }} {{if .Done}}<span> ✅</span>
+    <a href="#" hx-delete="/{{.ID.Hex}}" hx-swap="outerHTML swap:1s" hx-target="#todo-{{.ID.Hex}}"
+        hx-confirm="Are you sure you want to delete this todo?">Delete</a>
+    {{ .Title }} {{if .Done}}<span> ✔</span>
     {{ end }}
 </li>
 {{ end }}
