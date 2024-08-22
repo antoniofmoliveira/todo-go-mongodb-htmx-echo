@@ -64,33 +64,18 @@ func NewTemplates() *Templates {
 	}
 }
 
-/*
-This is not a class definition, but a struct definition in Go.
-Here's a succinct explanation:
-
-**Todo Struct**
-
-* The Todo struct represents a Todo item with three fields:
-  - `ID`: a unique identifier of type `primitive.ObjectID`,
-    which is used in MongoDB.
-  - `Title`: a string representing the title of the Todo item.
-  - `Done`: a boolean indicating whether the Todo item is
-    done or not.
-
-Note that this struct does not have any methods, only fields.
-*/
 type Todo struct {
 	ID    primitive.ObjectID `bson:"_id"`
 	Title string
 	Done  bool
 }
 
-// AllTodos retrieves all Todo items from the MongoDB collection.
-//
-// It takes a pointer to a mongo.Collection as a parameter.
-// Returns a slice of Todo items and an error.
-func AllTodos(collection *mongo.Collection) ([]Todo, error) {
-	cursor, err := collection.Find(context.TODO(), bson.D{{}})
+type TodoService struct {
+	collection *mongo.Collection
+}
+
+func (s *TodoService) AllTodos() ([]Todo, error) {
+	cursor, err := s.collection.Find(context.TODO(), bson.D{{}})
 	if err != nil {
 		return nil, err
 	}
@@ -101,66 +86,50 @@ func AllTodos(collection *mongo.Collection) ([]Todo, error) {
 	return results, nil
 }
 
-// GetTodo retrieves a Todo item from the MongoDB collection by its ID.
-//
-// It takes a pointer to a mongo.Collection and an ID as parameters.
-// Returns a Todo item and an error.
-func GetTodo(collection *mongo.Collection, id interface{}) (Todo, error) {
+func (s *TodoService) GetTodo(id interface{}) (Todo, error) {
 	var result Todo
-	err := collection.FindOne(context.TODO(), bson.D{{Key: "_id", Value: id}}).Decode(&result)
+	err := s.collection.FindOne(context.TODO(), bson.D{{Key: "_id", Value: id}}).Decode(&result)
 	if err != nil {
 		return Todo{}, err
 	}
 	return result, nil
 }
 
-// AddTodo adds a new Todo item to the MongoDB collection.
-//
-// It takes a pointer to a mongo.Collection and a Todo item as parameters.
-// Returns the ID of the newly inserted Todo item and an error.
-func AddTodo(collection *mongo.Collection, t Todo) (interface{}, error) {
+func (s *TodoService) AddTodo(t Todo) (interface{}, error) {
 	document := bson.D{{Key: "title", Value: t.Title}, {Key: "done", Value: false}}
-	result, err := collection.InsertOne(context.TODO(), document)
+	result, err := s.collection.InsertOne(context.TODO(), document)
 	if err != nil {
 		return nil, err
 	}
 	return result.InsertedID, nil
 }
 
-// UpdateTodo updates a Todo item in the MongoDB collection.
-//
-// It takes a pointer to a mongo.Collection and a Todo item as parameters.
-// Returns the ID of the updated Todo item and an error.
-func UpdateTodo(collection *mongo.Collection, t Todo) (interface{}, error) {
+func (s *TodoService) UpdateTodo(t Todo) (interface{}, error) {
 	filter := bson.D{{Key: "_id", Value: t.ID}}
 	// update := bson.D{{Key: "$set", Value: bson.D{{Key: "title", Value: t.title}, {Key: "done", Value: t.done}}}}
 	update := bson.D{{Key: "$set", Value: bson.D{{Key: "done", Value: t.Done}}}}
-	result, err := collection.UpdateOne(context.TODO(), filter, update)
+	result, err := s.collection.UpdateOne(context.TODO(), filter, update)
 	if err != nil {
 		return nil, err
 	}
 	return result.UpsertedID, nil
 }
 
-// DeleteTodo deletes a Todo item from the MongoDB collection.
-//
-// It takes a pointer to a mongo.Collection and an ID as parameters.
-// Returns the result of the deletion operation and an error.
-func DeleteTodo(collection *mongo.Collection, id interface{}) (interface{}, error) {
+func (s *TodoService) DeleteTodo(id interface{}) (interface{}, error) {
 	filter := bson.D{{Key: "_id", Value: id}}
-	result, err := collection.DeleteOne(context.TODO(), filter)
+	result, err := s.collection.DeleteOne(context.TODO(), filter)
 	if err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-// AllTodosHandler handles the retrieval of all Todo items from the MongoDB collection.
-//
-// It takes an echo.Context and a pointer to a mongo.Collection as parameters.
-// Returns an error.
-func AllTodosHandler(c echo.Context, collection *mongo.Collection) error {
-	todos, err := AllTodos(collection)
+type HandlerService struct {
+	todoService TodoService
+}
+
+func (h *HandlerService) AllTodosHandler(c echo.Context) error {
+	todos, err := h.todoService.AllTodos()
 	if err != nil {
 		c.Render(http.StatusOK, "messages", err.Error())
 		return c.String(http.StatusBadRequest, err.Error())
@@ -168,18 +137,14 @@ func AllTodosHandler(c echo.Context, collection *mongo.Collection) error {
 	return c.Render(http.StatusOK, "index", todos)
 }
 
-// CreateTodoHandler handles the creation of a new Todo item.
-//
-// It takes an echo.Context and a pointer to a mongo.Collection as parameters.
-// Returns an error.
-func CreateTodoHandler(c echo.Context, collection *mongo.Collection) error {
+func (h *HandlerService) CreateTodoHandler(c echo.Context) error {
 	todo := Todo{Title: c.FormValue("title")}
-	insertedId, err := AddTodo(collection, todo)
+	insertedId, err := h.todoService.AddTodo(todo)
 	if err != nil {
 		c.Render(http.StatusOK, "messages", err.Error())
 		return c.String(http.StatusBadRequest, err.Error())
 	}
-	todo, err = GetTodo(collection, insertedId)
+	todo, err = h.todoService.GetTodo(insertedId)
 	if err != nil {
 		c.Render(http.StatusOK, "messages", err.Error())
 		return c.String(http.StatusBadRequest, err.Error())
@@ -188,17 +153,13 @@ func CreateTodoHandler(c echo.Context, collection *mongo.Collection) error {
 	return c.Render(http.StatusOK, "todo", todo)
 }
 
-// DeleteTodoHandler handles the deletion of a Todo item from the MongoDB collection.
-//
-// It takes an echo.Context and a pointer to a mongo.Collection as parameters.
-// Returns an error.
-func DeleteTodoHandler(c echo.Context, collection *mongo.Collection) error {
+func (h *HandlerService) DeleteTodoHandler(c echo.Context) error {
 	oid, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
 		c.Render(http.StatusOK, "messages", err.Error())
 		return c.String(http.StatusBadRequest, err.Error())
 	}
-	_, err = DeleteTodo(collection, oid)
+	_, err = h.todoService.DeleteTodo(oid)
 	if err != nil {
 		c.Render(http.StatusOK, "messages", err.Error())
 		return c.String(http.StatusBadRequest, err.Error())
@@ -206,24 +167,20 @@ func DeleteTodoHandler(c echo.Context, collection *mongo.Collection) error {
 	return c.NoContent(http.StatusOK)
 }
 
-// ToggleTodoHandler updates the status of a Todo item in the MongoDB collection.
-//
-// It takes an echo.Context and a pointer to a mongo.Collection as parameters.
-// Returns an error.
-func ToggleTodoHandler(c echo.Context, collection *mongo.Collection) error {
+func (h *HandlerService) ToggleTodoHandler(c echo.Context) error {
 
 	oid, err := primitive.ObjectIDFromHex(c.Param("id"))
 	if err != nil {
 		c.Render(http.StatusOK, "messages", err.Error())
 		return c.String(http.StatusBadRequest, err.Error())
 	}
-	todo, err := GetTodo(collection, oid)
+	todo, err := h.todoService.GetTodo(oid)
 	if err != nil {
 		c.Render(http.StatusOK, "messages", err.Error())
 		return c.String(http.StatusBadRequest, err.Error())
 	}
 	todo.Done = !todo.Done
-	_, err = UpdateTodo(collection, todo)
+	_, err = h.todoService.UpdateTodo(todo)
 	if err != nil {
 		c.Render(http.StatusOK, "messages", err.Error())
 		return c.String(http.StatusBadRequest, err.Error())
@@ -257,6 +214,8 @@ func main() {
 		}
 	}()
 	collection := client.Database("todo_go").Collection("todo_go")
+	todoService := &TodoService{collection: collection}
+	handlerService := &HandlerService{todoService: *todoService}
 
 	e := echo.New()
 	e.Renderer = NewTemplates()
@@ -266,19 +225,19 @@ func main() {
 	e.Static("/js", "static/js")
 
 	e.GET("/", func(c echo.Context) error {
-		return AllTodosHandler(c, collection)
+		return handlerService.AllTodosHandler(c)
 	})
 
 	e.POST("/", func(c echo.Context) error {
-		return CreateTodoHandler(c, collection)
+		return handlerService.CreateTodoHandler(c)
 	})
 
 	e.DELETE("/:id", func(c echo.Context) error {
-		return DeleteTodoHandler(c, collection)
+		return handlerService.DeleteTodoHandler(c)
 	})
 
 	e.GET("/toggle/:id", func(c echo.Context) error {
-		return ToggleTodoHandler(c, collection)
+		return handlerService.ToggleTodoHandler(c)
 	})
 
 	e.Logger.Fatal(e.Start(":42069"))
